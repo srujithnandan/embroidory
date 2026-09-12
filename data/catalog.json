@@ -1,0 +1,67 @@
+{
+  "categories": [
+    {
+      "id": "cat-floral",
+      "name": "Floral",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-bridal",
+      "name": "Bridal",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-saree",
+      "name": "Saree",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-blouse",
+      "name": "Blouse",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-kids",
+      "name": "Kids",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-neck",
+      "name": "Neck Designs",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-border",
+      "name": "Border",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-traditional",
+      "name": "Traditional",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-modern",
+      "name": "Modern",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-arabic",
+      "name": "Arabic",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-custom",
+      "name": "Custom",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "cat-other",
+      "name": "Other",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "designs": [],
+  "nextSeq": 1,
+  "lastSaved": "2026-09-12T09:25:00.000Z"
+}
