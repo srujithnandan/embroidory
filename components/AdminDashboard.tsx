@@ -15,6 +15,7 @@ import {
   ArrowRight,
   ShieldAlert,
   Settings,
+  RefreshCw,
 } from "lucide-react";
 import { Category } from "@/types/category";
 import { Design } from "@/types/design";
@@ -68,6 +69,30 @@ export function AdminDashboard({
     loadStats();
   }, []);
 
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [reconcileMsg, setReconcileMsg] = useState("");
+
+  const handleReconcile = async () => {
+    setIsReconciling(true);
+    setReconcileMsg("");
+    try {
+      const res = await fetch("/api/sync/reconcile", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setReconcileMsg(data.message);
+        // Refresh stats
+        const statsRes = await fetch("/api/stats");
+        if (statsRes.ok) setStats(await statsRes.json());
+      } else {
+        setReconcileMsg(data.error || "Failed to reconcile storage");
+      }
+    } catch (e: any) {
+      setReconcileMsg("Failed: " + e.message);
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
   // Format last sync time into human friendly string
   const formatLastSync = (isoString: string) => {
     try {
@@ -117,17 +142,35 @@ export function AdminDashboard({
               Cloudinary Media CDN: Connected & Active (Cloud: hcn8xt5g)
             </span>
             <span className="text-stone-500">
-              Database: Persistent Catalog Database (Auto-Saving to Disk)
+              Database: Persistent Catalog Database (Auto-Saved to Cloud & Disk)
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleReconcile}
+            disabled={isReconciling}
+            className="px-3 py-1.5 rounded-xl bg-white border border-[#EBE5DD] hover:bg-stone-50 text-stone-700 font-semibold text-[11px] flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            title="Scan Cloudinary storage and make sure all photos are in the catalog"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#C5A059] ${isReconciling ? "animate-spin" : ""}`} />
+            <span>{isReconciling ? "Syncing Storage..." : "Sync All Storage"}</span>
+          </button>
           <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-semibold text-[11px] flex items-center gap-1.5 shadow-xs">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Duplicate Guard Online (SHA-256)</span>
+            <span>Duplicate Guard Online</span>
           </span>
         </div>
       </div>
+
+      {reconcileMsg && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium animate-in fade-in flex items-center justify-between">
+          <span>✓ {reconcileMsg}</span>
+          <button onClick={() => setReconcileMsg("")} className="text-emerald-600 hover:text-emerald-900 ml-3">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Metric Cards (Requirement 12 & 42) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5">

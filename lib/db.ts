@@ -69,10 +69,16 @@ class LocalDataStore {
     }
   }
 
-  async ensureSynced() {
-    if (!this.hasSyncedCloud) {
-      await this.syncFromCloudinary();
+  private lastCloudSync: number = 0;
+  private readonly SYNC_INTERVAL_MS = 5000;
+
+  async ensureSynced(force: boolean = false) {
+    const now = Date.now();
+    if (!force && now - this.lastCloudSync < this.SYNC_INTERVAL_MS) {
+      return;
     }
+    this.lastCloudSync = now;
+    await this.syncFromCloudinary();
   }
 
   private loadFromFile() {

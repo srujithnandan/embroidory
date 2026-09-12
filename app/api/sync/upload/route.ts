@@ -35,10 +35,13 @@ export async function POST(req: NextRequest) {
 
     // Validate mime type
     const mimeType = file.type.toLowerCase();
-    const isAllowed = ALLOWED_MIME_TYPES.includes(mimeType) || file.name.match(/\.(jpe?g|png|webp|heic)$/i);
+    const isAllowed =
+      mimeType.startsWith("image/") ||
+      file.name.match(/\.(jpe?g|png|webp|heic|heif|avif|bmp|tiff?)$/i) ||
+      mimeType === "application/octet-stream";
     if (!isAllowed) {
       return NextResponse.json(
-        { error: `Unsupported file format. Please upload JPG, PNG, WEBP, or HEIC images.` },
+        { error: `Unsupported file format. Please upload image files (JPG, PNG, WEBP, HEIC, etc.).` },
         { status: 400 }
       );
     }

@@ -10,6 +10,9 @@ export interface SyncFileItem {
   progress: number;
   errorMessage?: string;
   designId?: string;
+  previewUrl?: string;
+  isSelected?: boolean;
+  isDuplicate?: boolean;
 }
 
 export interface DuplicateCheckRequest {

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import confetti from "canvas-confetti";
 import { calculateFileHash } from "@/lib/hashing";
+import { optimizeImageForUpload } from "@/lib/image-optimizer";
 import { Category } from "@/types/category";
 import { SyncFileItem, SyncSummaryResult } from "@/types/sync";
 import {
@@ -17,6 +18,10 @@ import {
   ChevronUp,
   ShieldCheck,
   ArrowRight,
+  CheckSquare,
+  Square,
+  Sparkles,
+  Layers,
 } from "lucide-react";
 
 interface SyncModalProps {
@@ -26,30 +31,48 @@ interface SyncModalProps {
   onSyncComplete?: () => void;
 }
 
-type SyncStep = "select" | "processing" | "completed";
+type SyncStep = "select" | "review" | "processing" | "completed";
 
 export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncModalProps) {
   const [step, setStep] = useState<SyncStep>("select");
   const [selectedFiles, setSelectedFiles] = useState<SyncFileItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState<boolean>(false);
+
+  // Progress state
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [processedCount, setProcessedCount] = useState<number>(0);
   const [uploadedCount, setUploadedCount] = useState<number>(0);
   const [duplicateCount, setDuplicateCount] = useState<number>(0);
   const [failedCount, setFailedCount] = useState<number>(0);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [currentUploadingFile, setCurrentUploadingFile] = useState<string>("");
+
+  // Completed inspection toggles
   const [showUploadedList, setShowUploadedList] = useState<boolean>(false);
   const [showSkippedList, setShowSkippedList] = useState<boolean>(false);
   const [showFailedList, setShowFailedList] = useState<boolean>(false);
-  const [statusMessage, setStatusMessage] = useState<string>("");
-
   const [summary, setSummary] = useState<SyncSummaryResult | null>(null);
+
+  // Reconcile state
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
+  const [reconcileMessage, setReconcileMessage] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isCancelledRef = useRef<boolean>(false);
 
+  // Clean up object URLs on unmount or reset
+  const cleanupObjectUrls = (items: SyncFileItem[]) => {
+    items.forEach((item) => {
+      if (item.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+    });
+  };
+
   // Reset modal state
   const handleReset = () => {
+    cleanupObjectUrls(selectedFiles);
     setStep("select");
     setSelectedFiles([]);
     setProgressPercent(0);
@@ -57,43 +80,130 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
     setUploadedCount(0);
     setDuplicateCount(0);
     setFailedCount(0);
-    setIsPaused(false);
     setSummary(null);
     setStatusMessage("");
+    setCurrentUploadingFile("");
     setShowUploadedList(false);
     setShowSkippedList(false);
     setShowFailedList(false);
+    setReconcileMessage("");
     isCancelledRef.current = false;
   };
+
+  useEffect(() => {
+    return () => {
+      cleanupObjectUrls(selectedFiles);
+    };
+  }, []);
 
   if (!isOpen) return null;
 
   // Handle file selection from phone or desktop
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
 
-    const filesArray = Array.from(e.target.files);
-    const syncItems: SyncFileItem[] = filesArray.map((f, idx) => ({
-      id: `sync-${idx}-${Date.now()}`,
-      file: f,
-      filename: f.name,
-      size: f.size,
-      status: "pending",
-      progress: 0,
-    }));
+    const rawFiles = Array.from(e.target.files);
 
-    setSelectedFiles(syncItems);
+    // Initial items with preview URLs
+    const items: SyncFileItem[] = rawFiles.map((f, idx) => {
+      let previewUrl = "";
+      try {
+        previewUrl = URL.createObjectURL(f);
+      } catch {}
+
+      return {
+        id: `sync-${idx}-${Date.now()}`,
+        file: f,
+        filename: f.name,
+        size: f.size,
+        status: "pending",
+        progress: 0,
+        previewUrl,
+        isSelected: true,
+        isDuplicate: false,
+      };
+    });
+
+    setSelectedFiles(items);
+    setStep("review");
+    setIsCheckingDuplicates(true);
+
+    // Check duplicates in background
+    try {
+      const hashes: string[] = [];
+      for (const it of items) {
+        try {
+          const h = await calculateFileHash(it.file);
+          it.hash = h;
+          hashes.push(h);
+        } catch {
+          // If hashing fails, leave hash undefined
+        }
+      }
+
+      if (hashes.length > 0) {
+        const res = await fetch("/api/sync/check-duplicates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hashes }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const existingSet = new Set(data.existingHashes || []);
+
+          setSelectedFiles((prev) =>
+            prev.map((item) => {
+              const isDup = item.hash ? existingSet.has(item.hash) : false;
+              return {
+                ...item,
+                isDuplicate: isDup,
+                isSelected: !isDup, // auto-uncheck duplicates
+              };
+            })
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("Duplicate pre-check warning:", err);
+    } finally {
+      setIsCheckingDuplicates(false);
+    }
   };
 
-  // Start Sync Process
-  const startSync = async (filesToProcess: SyncFileItem[] = selectedFiles) => {
-    if (filesToProcess.length === 0) return;
+  // Toggle individual item selection
+  const toggleItemSelection = (id: string) => {
+    setSelectedFiles((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, isSelected: !item.isSelected } : item
+      )
+    );
+  };
+
+  // Bulk select helpers
+  const selectAllNew = () => {
+    setSelectedFiles((prev) =>
+      prev.map((item) => ({ ...item, isSelected: !item.isDuplicate }))
+    );
+  };
+
+  const selectAll = () => {
+    setSelectedFiles((prev) => prev.map((item) => ({ ...item, isSelected: true })));
+  };
+
+  const deselectAll = () => {
+    setSelectedFiles((prev) => prev.map((item) => ({ ...item, isSelected: false })));
+  };
+
+  // Start Sync Process on Checked Photos
+  const startUpload = async () => {
+    const itemsToProcess = selectedFiles.filter((f) => f.isSelected);
+    if (itemsToProcess.length === 0) return;
 
     setStep("processing");
     isCancelledRef.current = false;
-    setIsPaused(false);
 
-    const total = filesToProcess.length;
+    const total = itemsToProcess.length;
     let processed = 0;
     let uploaded = 0;
     let duplicates = 0;
@@ -103,121 +213,96 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
     const duplicateNames: string[] = [];
     const failedItems: { filename: string; reason: string }[] = [];
 
-    setStatusMessage("Calculating secure image hashes to check for duplicates...");
-
-    // 1. Calculate hashes for all files
-    const fileHashes: { item: SyncFileItem; hash: string }[] = [];
-
-    for (let i = 0; i < filesToProcess.length; i++) {
-      if (isCancelledRef.current) break;
-      const item = filesToProcess[i];
-      item.status = "hashing";
-
-      try {
-        const hash = await calculateFileHash(item.file);
-        item.hash = hash;
-        fileHashes.push({ item, hash });
-      } catch (err) {
-        console.error("Hashing failed for:", item.filename, err);
-        item.status = "error";
-        item.errorMessage = "Could not read file";
-        failed++;
-        failedItems.push({ filename: item.filename, reason: "Could not read file" });
-      }
-
-      const hashingProgress = Math.round(((i + 1) / total) * 30);
-      setProgressPercent(hashingProgress);
-    }
-
-    if (isCancelledRef.current) return;
-
-    // 2. Pre-check all hashes in one fast batch request
-    setStatusMessage("Checking database for duplicate designs...");
-    let existingHashesSet = new Set<string>();
-
-    try {
-      const hashes = fileHashes.map((fh) => fh.hash);
-      const res = await fetch("/api/sync/check-duplicates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hashes }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        existingHashesSet = new Set(data.existingHashes || []);
-      }
-    } catch (err) {
-      console.warn("Pre-check failed, will check individually on upload", err);
-    }
-
-    // 3. Upload only NEW images
-    setStatusMessage("Uploading new designs to cloud storage...");
-
-    const itemsToUpload = fileHashes.filter((fh) => {
-      if (existingHashesSet.has(fh.hash)) {
-        fh.item.status = "skipped_duplicate";
-        duplicates++;
-        processed++;
-        duplicateNames.push(fh.item.filename);
-        return false;
-      }
-      return true;
-    });
-
-    setDuplicateCount(duplicates);
-    setProcessedCount(processed);
-
-    // Controlled concurrency upload (2 concurrent uploads for stability on mobile)
+    // Controlled concurrency for maximum mobile reliability
     const concurrency = 2;
     let currentIndex = 0;
 
     const uploadWorker = async () => {
-      while (currentIndex < itemsToUpload.length && !isCancelledRef.current) {
+      while (currentIndex < itemsToProcess.length && !isCancelledRef.current) {
         const taskIndex = currentIndex++;
-        const { item, hash } = itemsToUpload[taskIndex];
+        const item = itemsToProcess[taskIndex];
 
         item.status = "uploading";
-        item.progress = 20;
+        setCurrentUploadingFile(item.filename);
+        setStatusMessage(`Optimizing & uploading ${taskIndex + 1} of ${total}...`);
 
+        // Step A: Client-side auto-compression if photo is large (prevents Cloudinary 10MB limit & timeouts)
+        let fileToUpload = item.file;
         try {
-          const formData = new FormData();
-          formData.append("file", item.file);
-          formData.append("file_hash", hash);
-          formData.append("filename", item.filename);
-          if (selectedCategory) {
-            formData.append("category_id", selectedCategory);
+          fileToUpload = await optimizeImageForUpload(item.file);
+        } catch {
+          fileToUpload = item.file;
+        }
+
+        // Step B: Calculate final hash
+        let hash = item.hash;
+        if (!hash) {
+          try {
+            hash = await calculateFileHash(fileToUpload);
+            item.hash = hash;
+          } catch {
+            hash = `hash_${Date.now()}_${Math.random()}`;
           }
+        }
 
-          const res = await fetch("/api/sync/upload", {
-            method: "POST",
-            body: formData,
-          });
+        // Step C: Upload with 2 automatic retries on network hiccups
+        let attempts = 0;
+        let success = false;
 
-          const result = await res.json();
-
-          if (res.ok) {
-            if (result.duplicate) {
-              item.status = "skipped_duplicate";
-              duplicates++;
-              duplicateNames.push(item.filename);
-            } else {
-              item.status = "uploaded";
-              item.designId = result.design?.design_id;
-              uploaded++;
-              uploadedNames.push(item.filename);
+        while (attempts < 2 && !success && !isCancelledRef.current) {
+          attempts++;
+          try {
+            const formData = new FormData();
+            formData.append("file", fileToUpload);
+            formData.append("file_hash", hash);
+            formData.append("filename", item.filename);
+            if (selectedCategory) {
+              formData.append("category_id", selectedCategory);
             }
-          } else {
-            item.status = "error";
-            item.errorMessage = result.error || "Upload failed";
-            failed++;
-            failedItems.push({ filename: item.filename, reason: result.error || "Upload failed" });
+
+            const res = await fetch("/api/sync/upload", {
+              method: "POST",
+              body: formData,
+            });
+
+            const result = await res.json();
+
+            if (res.ok) {
+              if (result.duplicate) {
+                item.status = "skipped_duplicate";
+                duplicates++;
+                duplicateNames.push(item.filename);
+              } else {
+                item.status = "uploaded";
+                item.designId = result.design?.design_id;
+                uploaded++;
+                uploadedNames.push(item.filename);
+              }
+              success = true;
+            } else {
+              if (attempts >= 2) {
+                item.status = "error";
+                item.errorMessage = result.message || result.error || "Upload failed";
+                failed++;
+                failedItems.push({
+                  filename: item.filename,
+                  reason: result.message || result.error || "Upload failed",
+                });
+              } else {
+                // Short wait before retry
+                await new Promise((r) => setTimeout(r, 800));
+              }
+            }
+          } catch (err: any) {
+            if (attempts >= 2) {
+              item.status = "error";
+              item.errorMessage = "Connection interrupted";
+              failed++;
+              failedItems.push({ filename: item.filename, reason: "Connection interrupted" });
+            } else {
+              await new Promise((r) => setTimeout(r, 800));
+            }
           }
-        } catch (err: any) {
-          item.status = "error";
-          item.errorMessage = "Connection interrupted";
-          failed++;
-          failedItems.push({ filename: item.filename, reason: "Connection interrupted" });
         }
 
         processed++;
@@ -226,12 +311,11 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
         setDuplicateCount(duplicates);
         setFailedCount(failed);
 
-        const currentPct = 30 + Math.round((processed / total) * 70);
-        setProgressPercent(Math.min(100, currentPct));
+        const currentPct = Math.round((processed / total) * 100);
+        setProgressPercent(currentPct);
       }
     };
 
-    // Run parallel workers
     const workers = [];
     for (let w = 0; w < concurrency; w++) {
       workers.push(uploadWorker());
@@ -254,7 +338,6 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
     setSummary(finalSummary);
     setStep("completed");
 
-    // Celebrate with confetti if new images were uploaded!
     if (uploaded > 0) {
       try {
         confetti({
@@ -269,23 +352,35 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
     onSyncComplete?.();
   };
 
-  // Retry Failed items
-  const handleRetryFailed = () => {
-    const failedItems = selectedFiles.filter((f) => f.status === "error");
-    if (failedItems.length > 0) {
-      failedItems.forEach((f) => {
-        f.status = "pending";
-        f.errorMessage = undefined;
-      });
-      startSync(failedItems);
+  // Reconcile with Cloudinary Storage
+  const handleReconcile = async () => {
+    setIsReconciling(true);
+    setReconcileMessage("Scanning Cloudinary storage for any missing designs...");
+    try {
+      const res = await fetch("/api/sync/reconcile", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setReconcileMessage(data.message);
+        onSyncComplete?.();
+      } else {
+        setReconcileMessage(data.error || "Failed to reconcile storage");
+      }
+    } catch (err: any) {
+      setReconcileMessage("Reconcile error: " + err.message);
+    } finally {
+      setIsReconciling(false);
     }
   };
 
+  const selectedCount = selectedFiles.filter((f) => f.isSelected).length;
+  const duplicateFilesCount = selectedFiles.filter((f) => f.isDuplicate).length;
+  const newFilesCount = selectedFiles.length - duplicateFilesCount;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-[#FAF8F5] rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-modal border border-[#EBE5DD] my-auto transition-all animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-[#FAF8F5] rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl border border-[#EBE5DD] my-auto transition-all animate-in fade-in zoom-in-95 max-h-[92vh] flex flex-col">
         {/* Top Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#EBE5DD]">
+        <div className="flex items-center justify-between pb-4 border-b border-[#EBE5DD] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-[#1C1917] flex items-center justify-center text-[#C5A059] shadow-sm">
               <UploadCloud className="w-5 h-5" />
@@ -295,7 +390,7 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
                 Sync Phone Gallery
               </h2>
               <p className="text-xs text-stone-500">
-                Back up your embroidery designs securely to the cloud
+                Studio Cloud Storage & Duplicate Protection
               </p>
             </div>
           </div>
@@ -305,30 +400,29 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
               onClose();
               handleReset();
             }}
-            className="p-2 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200/60"
+            className="p-2 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition-colors"
             aria-label="Close sync modal"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* ================= STEP 1: SELECT PHOTOS ================= */}
-        {step === "select" && (
-          <div className="py-6 space-y-6">
-            {/* Hidden File Input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
+        {/* Hidden File Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
 
-            {/* Tap to Select Box (Huge mobile tap target) */}
+        {/* ================= STEP 1: TAP TO SELECT ================= */}
+        {step === "select" && (
+          <div className="py-6 space-y-6 overflow-y-auto">
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-[#C5A059]/70 bg-[#FBF8F2] hover:bg-[#F6EFE3] active:scale-[0.99] rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-3 shadow-sm"
+              className="border-2 border-dashed border-[#C5A059]/70 bg-[#FBF8F2] hover:bg-[#F6EFE3] active:scale-[0.99] rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-3 shadow-sm"
             >
               <div className="w-16 h-16 rounded-full bg-white shadow-md flex items-center justify-center text-[#C5A059]">
                 <FileImage className="w-8 h-8" />
@@ -338,40 +432,147 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
                   Tap to Select Photos from Phone
                 </span>
                 <p className="text-xs sm:text-sm text-stone-500 max-w-sm mx-auto">
-                  Select 10, 50, or hundreds of photos from your gallery. Duplicates are automatically skipped!
+                  Select 10, 50, or hundreds of photos at once. Auto-compressed for maximum speed!
                 </p>
               </div>
               <button
                 type="button"
-                className="mt-2 px-5 py-2 rounded-full bg-[#1C1917] text-white text-xs font-semibold tracking-wide shadow"
+                className="mt-2 px-6 py-2.5 rounded-full bg-[#1C1917] text-white text-xs font-semibold tracking-wide shadow hover:bg-[#332E2A]"
               >
                 Choose Photos
               </button>
             </div>
 
-            {/* Selection Status */}
-            {selectedFiles.length > 0 && (
-              <div className="bg-white rounded-2xl p-4 border border-[#EBE5DD] shadow-sm flex items-center justify-between">
-                <div>
-                  <span className="text-sm font-bold text-stone-900 block">
-                    {selectedFiles.length} photos selected
-                  </span>
-                  <span className="text-xs text-stone-500">
-                    Ready for smart duplicate check & upload
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-xs font-semibold text-[#C5A059] hover:underline"
-                >
-                  Change selection
-                </button>
+            {/* Cloud Storage Reconcile Box */}
+            <div className="bg-white rounded-2xl p-4 border border-[#EBE5DD] shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-[#C5A059]" />
+                  <span>Sync Cloud Storage Directly</span>
+                </span>
+                <p className="text-[11px] text-stone-500">
+                  Ensure all embroidery photos in your Cloudinary storage are recorded in the app.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleReconcile}
+                disabled={isReconciling}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isReconciling ? "animate-spin" : ""}`} />
+                <span>{isReconciling ? "Scanning..." : "Reconcile Storage"}</span>
+              </button>
+            </div>
+
+            {reconcileMessage && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium animate-in fade-in">
+                ✓ {reconcileMessage}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ================= STEP 2: PHOTO PREVIEW & REVIEW GRID ================= */}
+        {step === "review" && (
+          <div className="py-4 space-y-4 overflow-y-auto flex-1">
+            {/* Top Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#EBE5DD]">
+              <div>
+                <span className="text-sm font-bold text-stone-900 block">
+                  {selectedCount} of {selectedFiles.length} photos selected
+                </span>
+                <span className="text-[11px] text-stone-500">
+                  {isCheckingDuplicates ? (
+                    <span className="text-[#C5A059] flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" /> Checking for duplicates...
+                    </span>
+                  ) : (
+                    <span>
+                      {newFilesCount} new • {duplicateFilesCount} already in catalog
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              {/* Selection Filter Pills */}
+              <div className="flex items-center gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={selectAllNew}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium hover:bg-emerald-100 transition-colors"
+                >
+                  Select New ({newFilesCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={selectAll}
+                  className="px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700 hover:bg-stone-200 font-medium transition-colors"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={deselectAll}
+                  className="px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700 hover:bg-stone-200 font-medium transition-colors"
+                >
+                  None
+                </button>
+              </div>
+            </div>
+
+            {/* Thumbnail Selection Grid */}
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 max-h-[38vh] overflow-y-auto p-1">
+              {selectedFiles.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => toggleItemSelection(item.id)}
+                  className={`relative group rounded-xl overflow-hidden aspect-square border-2 cursor-pointer transition-all ${
+                    item.isSelected
+                      ? "border-[#1C1917] shadow-md ring-2 ring-[#C5A059]/40"
+                      : "border-stone-200 opacity-60 hover:opacity-90"
+                  }`}
+                >
+                  {/* Thumbnail Image */}
+                  {item.previewUrl ? (
+                    <img
+                      src={item.previewUrl}
+                      alt={item.filename}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-stone-200 flex items-center justify-center text-stone-400">
+                      <FileImage className="w-6 h-6" />
+                    </div>
+                  )}
+
+                  {/* Top Selection Checkbox */}
+                  <div className="absolute top-1.5 left-1.5 bg-black/60 rounded-md p-0.5 text-white shadow">
+                    {item.isSelected ? (
+                      <CheckSquare className="w-4 h-4 text-[#C5A059]" />
+                    ) : (
+                      <Square className="w-4 h-4 text-stone-300" />
+                    )}
+                  </div>
+
+                  {/* Duplicate / New Badge */}
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-1 pt-3 text-[10px] leading-tight text-white truncate">
+                    {item.isDuplicate ? (
+                      <span className="text-amber-300 font-medium flex items-center gap-0.5">
+                        ↻ In Catalog
+                      </span>
+                    ) : (
+                      <span className="text-emerald-300 font-medium flex items-center gap-0.5">
+                        ✓ New
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
 
             {/* Optional Category Assignment */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 pt-1">
               <label className="text-xs font-semibold text-stone-700 flex items-center gap-1.5 uppercase tracking-wider">
                 <FolderTree className="w-3.5 h-3.5 text-[#C5A059]" />
                 <span>Assign Category (Optional)</span>
@@ -388,36 +589,47 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-stone-400">
-                You do not need to name each design now. The upload is lightning-fast!
-              </p>
             </div>
 
-            {/* Action Start Button */}
-            <div className="pt-2">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 pt-2">
               <button
-                onClick={() => startSync()}
-                disabled={selectedFiles.length === 0}
-                className="w-full py-3.5 rounded-2xl bg-[#1C1917] hover:bg-[#332E2A] text-white font-semibold text-sm tracking-wide shadow-md transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2 border border-[#C5A059]/40 cursor-pointer"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-3 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors"
+              >
+                Add More
+              </button>
+
+              <button
+                type="button"
+                onClick={startUpload}
+                disabled={selectedCount === 0 || isCheckingDuplicates}
+                className="flex-1 py-3.5 rounded-2xl bg-[#1C1917] hover:bg-[#332E2A] text-white font-semibold text-sm tracking-wide shadow-md transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2 border border-[#C5A059]/40 cursor-pointer"
               >
                 <UploadCloud className="w-5 h-5 text-[#C5A059]" />
-                <span>START SMART SYNC</span>
+                <span>UPLOAD {selectedCount} DESIGNS</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* ================= STEP 2: REAL-TIME PROGRESS ================= */}
+        {/* ================= STEP 3: REAL-TIME PROGRESS ================= */}
         {step === "processing" && (
-          <div className="py-8 space-y-6">
+          <div className="py-8 space-y-6 overflow-y-auto">
             <div className="text-center space-y-1.5">
               <h3 className="font-serif-luxury text-xl font-bold text-[#1C1917]">
-                Uploading your designs...
+                Uploading Designs to Cloud...
               </h3>
               <p className="text-xs text-stone-500">{statusMessage}</p>
+              {currentUploadingFile && (
+                <p className="text-[11px] text-stone-400 truncate max-w-sm mx-auto">
+                  {currentUploadingFile}
+                </p>
+              )}
             </div>
 
-            {/* Elegant Progress Bar */}
+            {/* Progress Bar */}
             <div className="space-y-2">
               <div className="w-full h-3.5 bg-stone-200 rounded-full overflow-hidden p-0.5 border border-stone-300">
                 <div
@@ -427,7 +639,7 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
               </div>
               <div className="flex items-center justify-between text-xs font-semibold text-stone-700">
                 <span>
-                  {processedCount} / {selectedFiles.length} processed
+                  {processedCount} / {selectedFiles.filter((f) => f.isSelected).length} processed
                 </span>
                 <span>{progressPercent}%</span>
               </div>
@@ -442,7 +654,7 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
 
               <div className="bg-amber-50 border border-amber-200/70 rounded-xl p-3 text-center">
                 <span className="block text-lg font-bold text-amber-700">{duplicateCount}</span>
-                <span className="text-[11px] font-medium text-amber-800">Already Existed</span>
+                <span className="text-[11px] font-medium text-amber-800">Already in Catalog</span>
               </div>
 
               <div className="bg-rose-50 border border-rose-200/70 rounded-xl p-3 text-center">
@@ -450,151 +662,56 @@ export function SyncModal({ isOpen, onClose, categories, onSyncComplete }: SyncM
                 <span className="text-[11px] font-medium text-rose-800">Failed</span>
               </div>
             </div>
-
-            <p className="text-center text-xs text-stone-400 italic">
-              Please keep this page open while photos are transferring...
-            </p>
           </div>
         )}
 
-        {/* ================= STEP 3: COMPLETED SUMMARY ================= */}
+        {/* ================= STEP 4: COMPLETED SUMMARY ================= */}
         {step === "completed" && summary && (
-          <div className="py-6 space-y-6">
-            {/* Header Banner */}
+          <div className="py-6 space-y-6 overflow-y-auto">
             <div className="text-center space-y-2">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-sm">
-                <ShieldCheck className="w-8 h-8" />
+              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                <CheckCircle2 className="w-8 h-8" />
               </div>
               <h3 className="font-serif-luxury text-2xl font-bold text-[#1C1917]">
-                {summary.failedCount > 0 ? "SYNC COMPLETED WITH WARNINGS" : "SYNC COMPLETED"}
+                Sync Completed Successfully!
               </h3>
-              <p className="text-xs text-stone-600 font-medium">
-                {summary.totalProcessed} photos processed from your phone
+              <p className="text-xs text-stone-500">
+                Your embroidery designs are safely stored in Cloudinary and backed up.
               </p>
             </div>
 
-            {/* Reassuring Big Card for Mom (Requirement 31) */}
-            <div className="bg-[#FAF3E7] border border-[#C5A059]/40 rounded-2xl p-4 sm:p-5 text-center space-y-2 shadow-sm">
-              <div className="flex items-center justify-center gap-2 text-stone-900 font-bold text-sm">
-                <CheckCircle2 className="w-5 h-5 text-[#C5A059]" />
-                <span>Your designs are safely backed up in the cloud.</span>
-              </div>
-              <p className="text-xs text-stone-600 max-w-md mx-auto leading-relaxed">
-                You can now safely delete the uploaded photos from your phone if you need more storage space.
-              </p>
-            </div>
-
-            {/* Counters Summary */}
+            {/* Metrics */}
             <div className="grid grid-cols-3 gap-2.5">
               <div className="bg-white border border-[#EBE5DD] rounded-xl p-3 text-center shadow-sm">
                 <span className="block text-xl font-bold text-emerald-600">
-                  ✓ {summary.uploadedCount}
+                  {summary.uploadedCount}
                 </span>
-                <span className="text-[11px] text-stone-500 font-medium">New Designs</span>
+                <span className="text-[11px] text-stone-500 font-medium">New Uploads</span>
               </div>
 
               <div className="bg-white border border-[#EBE5DD] rounded-xl p-3 text-center shadow-sm">
                 <span className="block text-xl font-bold text-amber-600">
-                  ↻ {summary.duplicateCount}
+                  {summary.duplicateCount}
                 </span>
                 <span className="text-[11px] text-stone-500 font-medium">Already in Catalog</span>
               </div>
 
               <div className="bg-white border border-[#EBE5DD] rounded-xl p-3 text-center shadow-sm">
                 <span className="block text-xl font-bold text-rose-600">
-                  ⚠ {summary.failedCount}
+                  {summary.failedCount}
                 </span>
                 <span className="text-[11px] text-stone-500 font-medium">Failed</span>
               </div>
             </div>
 
-            {/* Inspectable lists */}
-            <div className="space-y-2 text-xs">
-              {/* Uploaded files toggle */}
-              {summary.uploadedFiles.length > 0 && (
-                <div className="bg-white border border-[#EBE5DD] rounded-xl overflow-hidden">
-                  <button
-                    onClick={() => setShowUploadedList(!showUploadedList)}
-                    className="w-full px-3.5 py-2.5 flex items-center justify-between text-stone-800 font-semibold hover:bg-stone-50"
-                  >
-                    <span>✓ Successfully uploaded ({summary.uploadedFiles.length})</span>
-                    {showUploadedList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                  {showUploadedList && (
-                    <div className="px-3.5 pb-3 max-h-36 overflow-y-auto space-y-1 text-stone-600 divide-y divide-stone-100">
-                      {summary.uploadedFiles.map((fn, i) => (
-                        <div key={i} className="pt-1 truncate">
-                          ✓ {fn}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Duplicates toggle */}
-              {summary.duplicateFiles.length > 0 && (
-                <div className="bg-white border border-[#EBE5DD] rounded-xl overflow-hidden">
-                  <button
-                    onClick={() => setShowSkippedList(!showSkippedList)}
-                    className="w-full px-3.5 py-2.5 flex items-center justify-between text-stone-800 font-semibold hover:bg-stone-50"
-                  >
-                    <span>↻ Already uploaded ({summary.duplicateFiles.length})</span>
-                    {showSkippedList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                  {showSkippedList && (
-                    <div className="px-3.5 pb-3 max-h-36 overflow-y-auto space-y-1 text-stone-500 divide-y divide-stone-100">
-                      {summary.duplicateFiles.map((fn, i) => (
-                        <div key={i} className="pt-1 truncate">
-                          ↻ {fn}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Failed files */}
-              {summary.failedFiles.length > 0 && (
-                <div className="bg-rose-50 border border-rose-200 rounded-xl overflow-hidden">
-                  <button
-                    onClick={() => setShowFailedList(!showFailedList)}
-                    className="w-full px-3.5 py-2.5 flex items-center justify-between text-rose-900 font-semibold"
-                  >
-                    <span>⚠ Failed ({summary.failedFiles.length})</span>
-                    {showFailedList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                  {showFailedList && (
-                    <div className="px-3.5 pb-3 max-h-36 overflow-y-auto space-y-1 text-rose-700 divide-y divide-rose-100">
-                      {summary.failedFiles.map((f, i) => (
-                        <div key={i} className="pt-1">
-                          <span className="font-semibold">{f.filename}:</span> {f.reason}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-              {summary.failedCount > 0 && (
-                <button
-                  onClick={handleRetryFailed}
-                  className="w-full sm:w-auto flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs tracking-wide shadow flex items-center justify-center gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>RETRY FAILED</span>
-                </button>
-              )}
-
               <button
                 onClick={() => {
                   onClose();
                   handleReset();
                 }}
-                className="w-full sm:w-auto flex-1 py-3 rounded-xl bg-[#1C1917] hover:bg-[#332E2A] text-white font-semibold text-xs tracking-wide shadow flex items-center justify-center gap-2 border border-[#C5A059]/40 cursor-pointer"
+                className="w-full flex-1 py-3.5 rounded-xl bg-[#1C1917] hover:bg-[#332E2A] text-white font-semibold text-xs tracking-wide shadow flex items-center justify-center gap-2 border border-[#C5A059]/40 cursor-pointer"
               >
                 <span>View Uploaded Designs</span>
                 <ArrowRight className="w-4 h-4 text-[#C5A059]" />
