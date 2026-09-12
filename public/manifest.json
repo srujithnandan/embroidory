@@ -1,0 +1,17 @@
+{
+  "name": "Vihari's Embroidery",
+  "short_name": "Vihari's",
+  "description": "Exquisite embroidery design catalog and digital showroom",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF8F5",
+  "theme_color": "#1C1917",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -114,7 +114,7 @@ export function AdminDashboard({
             Studio Management
           </span>
           <h1 className="font-serif-luxury text-2xl sm:text-3xl font-bold text-[#1C1917]">
-            Welcome, Embroidery Studio
+            Welcome, Vihari&apos;s Embroidery
           </h1>
           <p className="text-xs sm:text-sm text-stone-500 mt-1">
             Manage catalog photos, back up new designs, and organize collections for your customers.

@@ -11,7 +11,8 @@ import { CategoryFilter } from "./CategoryFilter";
 import { GallerySkeletonGrid } from "./SkeletonLoaders";
 import { useToast } from "./Toast";
 import { useAdminAuth } from "@/lib/admin-auth";
-import { Sparkles, UploadCloud, ChevronRight, Layers } from "lucide-react";
+import { useCatalogCache } from "@/lib/image-cache";
+import { Sparkles, UploadCloud, ChevronRight, Layers, CheckCircle2 } from "lucide-react";
 
 interface GalleryProps {
   initialDesigns?: Design[];
@@ -36,6 +37,9 @@ export function Gallery({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
 
+  // Background Cache for all designs on device
+  const { isCached, cachedCount, totalCount } = useCatalogCache(designs);
+
   // Filters state
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
@@ -55,7 +59,7 @@ export function Gallery({
         if (search.trim()) params.set("search", search.trim());
         if (sortBy) params.set("sort", sortBy);
         params.set("page", String(pageNum));
-        params.set("limit", "36");
+        params.set("limit", "500");
 
         const res = await fetch(`/api/designs?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch designs");
@@ -204,11 +208,24 @@ export function Gallery({
       )}
 
       {/* Main Grid Header info */}
-      <div className="flex items-center justify-between pt-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
         <div>
-          <h2 className="font-serif-luxury text-lg sm:text-xl font-bold text-[#1C1917]">
-            {category === "all" ? "All Designs" : categories.find((c) => c.id === category)?.name || "Designs"}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="font-serif-luxury text-lg sm:text-xl font-bold text-[#1C1917]">
+              {category === "all" ? "All Designs" : categories.find((c) => c.id === category)?.name || "Designs"}
+            </h2>
+            {isCached ? (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[11px] font-medium animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Saved on Device ({designs.length} ready offline)</span>
+              </span>
+            ) : cachedCount > 0 && cachedCount < totalCount ? (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200/80 text-amber-700 text-[11px] font-medium">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span>Pre-downloading ({cachedCount}/{totalCount})</span>
+              </span>
+            ) : null}
+          </div>
           <p className="text-xs text-stone-500 mt-0.5">
             {total} {total === 1 ? "design" : "designs"} available
           </p>

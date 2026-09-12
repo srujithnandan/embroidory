@@ -1,5 +1,5 @@
 -- ==============================================================================
--- EMBROIDERY STUDIO - INITIAL SEED DATA
+-- VIHARI'S EMBROIDERY - INITIAL SEED DATA
 -- Run in Supabase SQL Editor after running schema.sql
 -- ==============================================================================
 

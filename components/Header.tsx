@@ -55,7 +55,7 @@ export function Header({ onOpenSync }: HeaderProps) {
             </div>
             <div>
               <span className="font-serif-luxury text-xl sm:text-2xl font-bold tracking-wider text-[#1C1917] block leading-none">
-                EMBROIDERY STUDIO
+                VIHARI&apos;S EMBROIDERY
               </span>
               <span className="text-[11px] uppercase tracking-widest text-[#C5A059] font-medium block mt-1">
                 Beautiful Designs • Quality Embroidery

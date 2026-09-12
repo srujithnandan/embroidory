@@ -36,7 +36,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
         <footer className="border-t border-[#EBE5DD] py-6 sm:py-8 text-center text-xs text-stone-400 pb-20 sm:pb-8">
           <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
             <span className="font-serif-luxury font-medium text-stone-600">
-              EMBROIDERY STUDIO — Beautiful Designs • Quality Embroidery
+              VIHARI&apos;S EMBROIDERY — Beautiful Designs • Quality Embroidery
             </span>
 
             <div className="flex items-center gap-4">

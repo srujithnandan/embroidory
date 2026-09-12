@@ -3,13 +3,13 @@ import { db } from "@/lib/db";
 import { PresentationMode } from "@/components/PresentationMode";
 
 export const metadata = {
-  title: "Showroom • EMBROIDERY STUDIO",
+  title: "Showroom • VIHARI'S EMBROIDERY",
   description: "Browse curated embroidery designs in distraction-free customer showroom mode.",
 };
 
 export default async function PresentationPage() {
   const [designsData, categories] = await Promise.all([
-    db.getDesigns({ limit: 60 }),
+    db.getDesigns({ limit: 500 }),
     db.getCategories(),
   ]);
 

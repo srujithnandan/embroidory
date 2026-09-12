@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { AdminDashboardClientWrapper } from "./AdminDashboardClientWrapper";
 
 export const metadata = {
-  title: "Admin Dashboard • EMBROIDERY STUDIO",
+  title: "Admin Dashboard • VIHARI'S EMBROIDERY",
   description: "Manage embroidery catalog, sync photos, and track collection stats.",
 };
 

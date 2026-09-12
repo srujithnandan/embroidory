@@ -6,7 +6,7 @@ import { Eye, Sparkles } from "lucide-react";
 
 export default async function HomePage() {
   const [designsData, categories] = await Promise.all([
-    db.getDesigns({ limit: 36 }),
+    db.getDesigns({ limit: 500 }),
     db.getCategories(),
   ]);
 

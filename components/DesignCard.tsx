@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { Design } from "@/types/design";
 import { Heart, Check } from "lucide-react";
@@ -24,6 +24,7 @@ export function DesignCard({
   onToggleSelect,
   priority = false,
 }: DesignCardProps) {
+  const [isLoaded, setIsLoaded] = useState(false);
   const imageUrl = design.thumbnail_url || design.cloudinary_url;
 
   return (
@@ -48,8 +49,13 @@ export function DesignCard({
             src={imageUrl}
             alt={design.name}
             fill
+            unoptimized
+            decoding="async"
+            onLoad={() => setIsLoaded(true)}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+            className={`object-cover group-hover:scale-105 transition-all duration-500 ease-out ${
+              isLoaded ? "opacity-100 scale-100 blur-0" : "opacity-0 scale-95 blur-xs"
+            }`}
             priority={priority}
             loading={priority ? "eager" : "lazy"}
           />

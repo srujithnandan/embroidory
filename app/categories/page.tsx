@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { FolderTree, Sparkles, ArrowRight } from "lucide-react";
 
 export const metadata = {
-  title: "Categories • EMBROIDERY STUDIO",
+  title: "Categories • VIHARI'S EMBROIDERY",
   description: "Browse embroidery designs categorized by style, garment, and occasion.",
 };
 

@@ -4,13 +4,13 @@ import { Gallery } from "@/components/Gallery";
 import { Heart } from "lucide-react";
 
 export const metadata = {
-  title: "Favorites • EMBROIDERY STUDIO",
+  title: "Favorites • VIHARI'S EMBROIDERY",
   description: "Most loved and popular embroidery designs.",
 };
 
 export default async function FavoritesPage() {
   const [designsData, categories] = await Promise.all([
-    db.getDesigns({ favorite: true, limit: 36 }),
+    db.getDesigns({ favorite: true, limit: 500 }),
     db.getCategories(),
   ]);
 

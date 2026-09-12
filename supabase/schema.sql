@@ -1,5 +1,5 @@
 -- ==============================================================================
--- EMBROIDERY STUDIO - COMPLETE DATABASE SCHEMA
+-- VIHARI'S EMBROIDERY - COMPLETE DATABASE SCHEMA
 -- Supabase PostgreSQL Setup
 -- ==============================================================================
 

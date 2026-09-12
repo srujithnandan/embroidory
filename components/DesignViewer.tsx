@@ -58,6 +58,30 @@ export function DesignViewer({
     ? designs.findIndex((d) => d.id === design.id || d.design_id === design.design_id)
     : -1;
 
+  // Smart pre-fetching of adjacent full-resolution images for instantaneous swiping
+  useEffect(() => {
+    if (currentIndex === -1 || designs.length === 0 || typeof window === "undefined") return;
+
+    // Indices to preload: prev 1, next 1, next 2
+    const indicesToPreload = [
+      (currentIndex - 1 + designs.length) % designs.length,
+      (currentIndex + 1) % designs.length,
+      (currentIndex + 2) % designs.length,
+    ];
+
+    indicesToPreload.forEach((idx) => {
+      const target = designs[idx];
+      if (target) {
+        const url = target.cloudinary_url || target.thumbnail_url;
+        if (url) {
+          const img = new window.Image();
+          img.decoding = "async";
+          img.src = url;
+        }
+      }
+    });
+  }, [currentIndex, designs]);
+
   const handlePrevious = useCallback(() => {
     if (currentIndex > 0) {
       onNavigate(designs[currentIndex - 1]);
@@ -247,6 +271,7 @@ export function DesignViewer({
             alt={design.name}
             className="max-h-[75vh] sm:max-h-[82vh] max-w-[92vw] sm:max-w-[85vw] object-contain rounded-lg shadow-2xl transition-all"
             loading="eager"
+            decoding="async"
           />
         </div>
 

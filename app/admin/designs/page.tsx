@@ -40,7 +40,7 @@ export default function BulkDesignsManagementPage() {
     setLoading(true);
     try {
       const [desRes, catRes] = await Promise.all([
-        fetch("/api/designs?limit=100"),
+        fetch("/api/designs?limit=500"),
         fetch("/api/categories"),
       ]);
 

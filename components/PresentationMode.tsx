@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Design } from "@/types/design";
 import { Category } from "@/types/category";
 import { DesignViewer } from "./DesignViewer";
-import { Search, ChevronLeft, Heart, Sparkles, Filter } from "lucide-react";
+import { useCatalogCache } from "@/lib/image-cache";
+import { Search, ChevronLeft, Heart, Sparkles, Filter, CheckCircle2 } from "lucide-react";
 
 interface PresentationModeProps {
   initialDesigns?: Design[];
@@ -22,6 +23,9 @@ export function PresentationMode({
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
   const [viewFavoritesOnly, setViewFavoritesOnly] = useState(false);
 
+  // Background caching for showroom
+  const { isCached } = useCatalogCache(designs);
+
   // Fetch designs if not passed or when filters change
   useEffect(() => {
     async function load() {
@@ -29,7 +33,7 @@ export function PresentationMode({
       if (activeCategory !== "all") params.set("category", activeCategory);
       if (searchQuery) params.set("search", searchQuery);
       if (viewFavoritesOnly) params.set("favorite", "true");
-      params.set("limit", "60");
+      params.set("limit", "500");
 
       try {
         const res = await fetch(`/api/designs?${params.toString()}`);
@@ -61,10 +65,15 @@ export function PresentationMode({
           {/* Presentation Branding */}
           <div className="text-center">
             <h1 className="font-serif-luxury text-lg sm:text-xl font-bold tracking-wider text-[#1C1917]">
-              EMBROIDERY STUDIO
+              VIHARI&apos;S EMBROIDERY
             </h1>
-            <p className="text-[10px] uppercase tracking-widest text-[#C5A059] font-medium">
-              Exclusive Design Catalog
+            <p className="text-[10px] uppercase tracking-widest text-[#C5A059] font-medium flex items-center justify-center gap-1">
+              <span>Exclusive Design Catalog</span>
+              {isCached && (
+                <span className="text-emerald-700 font-semibold inline-flex items-center gap-0.5">
+                  • <CheckCircle2 className="w-2.5 h-2.5" /> Offline Ready
+                </span>
+              )}
             </p>
           </div>
 

@@ -1,7 +1,7 @@
-# EMBROIDERY STUDIO — Digital Catalog & Management System
+# VIHARI'S EMBROIDERY — Digital Catalog & Management System
 
 > **Beautiful Designs • Quality Embroidery**  
-> A production-quality, mobile-first embroidery design gallery and digital catalog management system built for embroidery studios and ateliers.
+> A production-quality, mobile-first embroidery design gallery and digital catalog management system built for Vihari's Embroidery.
 
 ---
 
@@ -13,7 +13,7 @@ For an embroidery business, design photos are traditionally kept on a phone gall
 - The same design photo is frequently uploaded multiple times.
 - There is anxiety over deleting phone photos without being certain they are backed up safely.
 
-**EMBROIDERY STUDIO** solves this with a **cloud-backed digital catalog**:
+**VIHARI'S EMBROIDERY** solves this with a **cloud-backed digital catalog**:
 - **Smart Phone Gallery Sync**: Select 10, 50, or hundreds of photos directly from your phone.
 - **Client-Side SHA-256 Hashing**: Prevents duplicates by computing content-based SHA-256 hashes in the browser before upload—renaming photos on the phone will never fool the system.
 - **Pre-flight Duplicate Check**: Only brand-new images are uploaded to Cloudinary and cataloged in Supabase.
@@ -156,8 +156,8 @@ Open [http://localhost:3000](http://localhost:3000) in your mobile browser or re
    ```bash
    git init
    git add .
-   git commit -m "Initial commit of Embroidery Studio"
-   git remote add origin https://github.com/your-username/embroidery-studio.git
+   git commit -m "Initial commit of Vihari's Embroidery"
+   git remote add origin https://github.com/your-username/viharis-embroidery.git
    git push -u origin main
    ```
 2. Import your GitHub repository on [Vercel](https://vercel.com).
@@ -203,4 +203,4 @@ Open [http://localhost:3000](http://localhost:3000) in your mobile browser or re
 
 ## 📄 License
 
-MIT License — Built for Embroidery Studio.
+MIT License — Built for Vihari's Embroidery.

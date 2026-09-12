@@ -23,9 +23,14 @@ export const viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "EMBROIDERY STUDIO • Beautiful Designs • Quality Embroidery",
+  title: "VIHARI'S EMBROIDERY • Beautiful Designs • Quality Embroidery",
   description:
-    "Discover a curated digital collection of exquisite embroidery designs, bridal patterns, saree borders, and bespoke fashion motifs.",
+    "Discover a curated digital collection of exquisite embroidery designs, bridal patterns, saree borders, and bespoke fashion motifs by Vihari's Embroidery.",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
   keywords: [
     "embroidery designs",
     "embroidery catalog",
